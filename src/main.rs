@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use dhl::{
+    complete,
     db::Store,
     dhl_home,
     names::random_name,
@@ -62,6 +63,13 @@ enum Commands {
         #[arg(default_value = "zsh")]
         shell: String,
     },
+    /// Dynamic completion helper (called by shell completion functions)
+    #[command(hide = true, name = "__complete")]
+    Complete {
+        /// Full tokenized command line, including "dhl" as the first token
+        #[arg(raw = true)]
+        words: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -106,7 +114,30 @@ fn open_store() -> Result<Store> {
 
 fn shell_init(shell: &str) -> &'static str {
     match shell {
+        "bash" => concat!(
+            // follow wrapper
+            "dhl() {\n",
+            "  if [[ \"$1\" == create ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
+            "    local _out _status _cd\n",
+            "    _out=$(command dhl \"$@\")\n",
+            "    _status=$?\n",
+            "    _cd=$(printf '%s\\n' \"$_out\" | grep '^DHL_CD:' | head -1 | cut -c8-)\n",
+            "    printf '%s\\n' \"$_out\" | grep -v '^DHL_CD:'\n",
+            "    [[ -n \"$_cd\" ]] && cd \"$_cd\"\n",
+            "    return \"$_status\"\n",
+            "  else\n",
+            "    command dhl \"$@\"\n",
+            "  fi\n",
+            "}\n",
+            // completion
+            "_dhl_complete() {\n",
+            "  local IFS=$'\\n'\n",
+            "  COMPREPLY=($(command dhl __complete -- \"${COMP_WORDS[@]}\"))\n",
+            "}\n",
+            "complete -F _dhl_complete dhl\n",
+        ),
         "fish" => concat!(
+            // follow wrapper
             "function dhl\n",
             "    if test \"$argv[1]\" = create; and not contains -- --no-follow $argv\n",
             "        set _dhl_out (command dhl $argv)\n",
@@ -123,9 +154,12 @@ fn shell_init(shell: &str) -> &'static str {
             "        command dhl $argv\n",
             "    end\n",
             "end\n",
+            // completion — fish passes tokens as separate args via command substitution
+            "complete -c dhl -f -a '(command dhl __complete -- (commandline -opc))'\n",
         ),
-        // bash and zsh share identical syntax
+        // zsh (default)
         _ => concat!(
+            // follow wrapper
             "dhl() {\n",
             "  if [[ \"$1\" == create ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
             "    local _out _status _cd\n",
@@ -139,6 +173,13 @@ fn shell_init(shell: &str) -> &'static str {
             "    command dhl \"$@\"\n",
             "  fi\n",
             "}\n",
+            // completion
+            "_dhl_complete() {\n",
+            "  local -a _comps\n",
+            "  _comps=(${(f)\"$(command dhl __complete -- \"${words[@]}\")\"})\n",
+            "  compadd -a _comps\n",
+            "}\n",
+            "compdef _dhl_complete dhl\n",
         ),
     }
 }
@@ -232,6 +273,12 @@ fn main() -> Result<()> {
 
         Commands::ShellInit { shell } => {
             print!("{}", shell_init(&shell));
+        }
+
+        Commands::Complete { words } => {
+            for c in complete::completions(&store, &words) {
+                println!("{}", c);
+            }
         }
     }
 

@@ -1,3 +1,4 @@
+pub mod complete;
 pub mod db;
 pub mod names;
 pub mod repo;
