@@ -23,7 +23,9 @@ impl Store {
     }
 
     fn workspaces_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(WORKSPACES_CF).expect("workspaces CF missing")
+        self.db
+            .cf_handle(WORKSPACES_CF)
+            .expect("workspaces CF missing")
     }
 
     pub fn add_root(&self, path: &str) -> Result<()> {
@@ -32,7 +34,9 @@ impl Store {
     }
 
     pub fn list_roots(&self) -> Result<Vec<String>> {
-        let iter = self.db.iterator_cf(self.roots_cf(), rocksdb::IteratorMode::Start);
+        let iter = self
+            .db
+            .iterator_cf(self.roots_cf(), rocksdb::IteratorMode::Start);
         let mut roots = Vec::new();
         for item in iter {
             let (key, _) = item?;
@@ -47,7 +51,8 @@ impl Store {
     }
 
     pub fn put_workspace(&self, name: &str, value: &str) -> Result<()> {
-        self.db.put_cf(self.workspaces_cf(), name.as_bytes(), value.as_bytes())?;
+        self.db
+            .put_cf(self.workspaces_cf(), name.as_bytes(), value.as_bytes())?;
         Ok(())
     }
 
@@ -64,7 +69,9 @@ impl Store {
     }
 
     pub fn list_workspaces(&self) -> Result<Vec<(String, String)>> {
-        let iter = self.db.iterator_cf(self.workspaces_cf(), rocksdb::IteratorMode::Start);
+        let iter = self
+            .db
+            .iterator_cf(self.workspaces_cf(), rocksdb::IteratorMode::Start);
         let mut workspaces = Vec::new();
         for item in iter {
             let (key, val) = item?;

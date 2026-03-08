@@ -1,7 +1,17 @@
 use crate::{db::Store, repo::list_repos};
 
 const TOP_LEVEL: &[&str] = &[
-    "root", "repo", "create", "list", "ls", "delete", "rm", "get", "path", "goto", "go",
+    "root",
+    "repo",
+    "create",
+    "list",
+    "ls",
+    "delete",
+    "rm",
+    "get",
+    "path",
+    "goto",
+    "go",
     "shell-init",
 ];
 const ROOT_SUBCOMMANDS: &[&str] = &["add", "remove", "list", "ls"];

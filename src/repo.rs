@@ -27,7 +27,8 @@ pub fn list_repos(store: &Store) -> Result<Vec<RepoEntry>> {
         for entry in read_dir.flatten() {
             let path = entry.path();
             if is_git_repo(&path) {
-                let name = path.file_name()
+                let name = path
+                    .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 entries.push((name, root.clone(), path));
@@ -37,10 +38,12 @@ pub fn list_repos(store: &Store) -> Result<Vec<RepoEntry>> {
 
     // Count how many roots contain each bare name
     let name_count: std::collections::HashMap<String, usize> =
-        entries.iter().fold(std::collections::HashMap::new(), |mut m, (name, _, _)| {
-            *m.entry(name.clone()).or_insert(0) += 1;
-            m
-        });
+        entries
+            .iter()
+            .fold(std::collections::HashMap::new(), |mut m, (name, _, _)| {
+                *m.entry(name.clone()).or_insert(0) += 1;
+                m
+            });
 
     let result = entries
         .into_iter()
@@ -50,7 +53,12 @@ pub fn list_repos(store: &Store) -> Result<Vec<RepoEntry>> {
             } else {
                 name.clone()
             };
-            RepoEntry { name, root, path, display_name }
+            RepoEntry {
+                name,
+                root,
+                path,
+                display_name,
+            }
         })
         .collect();
 
@@ -108,18 +116,25 @@ pub fn find_repo(store: &Store, name: &str) -> Result<PathBuf> {
 
 /// Clone a git URL into a root directory, optionally with a custom local name.
 /// Returns the path of the cloned repository.
-pub fn clone_repo(store: &Store, url: &str, root: Option<&str>, local_name: Option<&str>) -> Result<PathBuf> {
+pub fn clone_repo(
+    store: &Store,
+    url: &str,
+    root: Option<&str>,
+    local_name: Option<&str>,
+) -> Result<PathBuf> {
     let roots = store.list_roots()?;
     if roots.is_empty() {
         bail!("No repository roots configured. Use `dhl root add <path>` first.");
     }
 
     let target_root = if let Some(r) = root {
-        let canonical = std::fs::canonicalize(r)
-            .unwrap_or_else(|_| PathBuf::from(r));
+        let canonical = std::fs::canonicalize(r).unwrap_or_else(|_| PathBuf::from(r));
         let s = canonical.to_string_lossy().into_owned();
         if !roots.contains(&s) {
-            bail!("'{}' is not a registered root. Add it first with `dhl root add`.", s);
+            bail!(
+                "'{}' is not a registered root. Add it first with `dhl root add`.",
+                s
+            );
         }
         s
     } else if roots.len() == 1 {
@@ -190,7 +205,11 @@ pub fn parse_repo_spec(spec: &str) -> (String, Option<String>, Option<String>) {
             let pos = colon_positions[0];
             let name = spec[..pos].to_string();
             let from = &spec[pos + 1..];
-            let from = if from.is_empty() { None } else { Some(from.to_string()) };
+            let from = if from.is_empty() {
+                None
+            } else {
+                Some(from.to_string())
+            };
             (name, from, None)
         }
         _ => {
@@ -200,8 +219,16 @@ pub fn parse_repo_spec(spec: &str) -> (String, Option<String>, Option<String>) {
             let name = spec[..from_pos].to_string();
             let from = &spec[from_pos + 1..to_pos];
             let to = &spec[to_pos + 1..];
-            let from = if from.is_empty() { None } else { Some(from.to_string()) };
-            let to = if to.is_empty() { None } else { Some(to.to_string()) };
+            let from = if from.is_empty() {
+                None
+            } else {
+                Some(from.to_string())
+            };
+            let to = if to.is_empty() {
+                None
+            } else {
+                Some(to.to_string())
+            };
             (name, from, to)
         }
     }

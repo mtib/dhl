@@ -3,7 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{db::Store, dhl_home, repo::{find_repo, parse_repo_spec}};
+use crate::{
+    db::Store,
+    dhl_home,
+    repo::{find_repo, parse_repo_spec},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Workspace {
@@ -20,11 +24,7 @@ pub struct WorkspaceRepo {
 }
 
 impl Workspace {
-    pub fn create(
-        store: &Store,
-        name: String,
-        repo_specs: &[String],
-    ) -> Result<Self> {
+    pub fn create(store: &Store, name: String, repo_specs: &[String]) -> Result<Self> {
         let home = dhl_home()?;
         let workspace_path = home.join(&name);
         std::fs::create_dir_all(&workspace_path)?;
@@ -35,7 +35,12 @@ impl Workspace {
             let repo_path = find_repo(store, &repo_name)?;
             let worktree_path = workspace_path.join(&repo_name);
 
-            create_worktree(&repo_path, &worktree_path, from_branch.as_deref(), to_branch.as_deref())?;
+            create_worktree(
+                &repo_path,
+                &worktree_path,
+                from_branch.as_deref(),
+                to_branch.as_deref(),
+            )?;
 
             repos.push(WorkspaceRepo {
                 repo: repo_name,
@@ -44,7 +49,11 @@ impl Workspace {
             });
         }
 
-        let ws = Workspace { name: name.clone(), path: workspace_path, repos };
+        let ws = Workspace {
+            name: name.clone(),
+            path: workspace_path,
+            repos,
+        };
         let serialized = serde_json::to_string(&ws)?;
         store.put_workspace(&name, &serialized)?;
         Ok(ws)
@@ -72,7 +81,8 @@ impl Workspace {
 
         // Remove each worktree
         for repo_entry in &ws.repos {
-            let repo_path = find_repo_path_from_worktree(store, &repo_entry.repo, &repo_entry.worktree_path);
+            let repo_path =
+                find_repo_path_from_worktree(store, &repo_entry.repo, &repo_entry.worktree_path);
             if let Some(repo_path) = repo_path {
                 remove_worktree(&repo_path, &repo_entry.worktree_path);
             }
@@ -120,14 +130,20 @@ fn create_worktree(
     Ok(())
 }
 
-fn find_repo_path_from_worktree(store: &Store, repo_name: &str, _worktree: &Path) -> Option<PathBuf> {
+fn find_repo_path_from_worktree(
+    store: &Store,
+    repo_name: &str,
+    _worktree: &Path,
+) -> Option<PathBuf> {
     crate::repo::find_repo(store, repo_name).ok()
 }
 
 fn remove_worktree(repo: &Path, worktree_path: &Path) {
     let _ = Command::new("git")
-        .arg("-C").arg(repo)
-        .arg("worktree").arg("remove")
+        .arg("-C")
+        .arg(repo)
+        .arg("worktree")
+        .arg("remove")
         .arg("--force")
         .arg(worktree_path)
         .output();

@@ -246,7 +246,11 @@ fn main() -> Result<()> {
             }
         },
 
-        Commands::Create { name, no_follow, repos } => {
+        Commands::Create {
+            name,
+            no_follow,
+            repos,
+        } => {
             if repos.is_empty() {
                 anyhow::bail!("Specify at least one repo.");
             }
@@ -277,7 +281,10 @@ fn main() -> Result<()> {
                 anyhow::bail!("Specify at least one workspace name or pass --all.");
             }
             let to_delete: Vec<String> = if all {
-                Workspace::list_all(&store)?.into_iter().map(|ws| ws.name).collect()
+                Workspace::list_all(&store)?
+                    .into_iter()
+                    .map(|ws| ws.name)
+                    .collect()
             } else {
                 names
             };
@@ -287,19 +294,15 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Get { name } => {
-            match Workspace::load(&store, &name)? {
-                Some(ws) => println!("{}", ws.path.display()),
-                None => anyhow::bail!("Workspace '{}' not found.", name),
-            }
-        }
+        Commands::Get { name } => match Workspace::load(&store, &name)? {
+            Some(ws) => println!("{}", ws.path.display()),
+            None => anyhow::bail!("Workspace '{}' not found.", name),
+        },
 
-        Commands::Goto { name } => {
-            match Workspace::load(&store, &name)? {
-                Some(ws) => println!("{}{}", FOLLOW_MARKER, ws.path.display()),
-                None => anyhow::bail!("Workspace '{}' not found.", name),
-            }
-        }
+        Commands::Goto { name } => match Workspace::load(&store, &name)? {
+            Some(ws) => println!("{}{}", FOLLOW_MARKER, ws.path.display()),
+            None => anyhow::bail!("Workspace '{}' not found.", name),
+        },
 
         Commands::ShellInit { shell } => {
             print!("{}", shell_init(&shell));
