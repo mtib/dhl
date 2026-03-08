@@ -57,6 +57,12 @@ enum Commands {
         /// Workspace name
         name: String,
     },
+    /// Navigate the shell to a workspace (requires shell integration)
+    #[command(alias = "go")]
+    Goto {
+        /// Workspace name
+        name: String,
+    },
     /// Print shell integration code; add `eval "$(dhl shell-init)"` to your shell rc
     ShellInit {
         /// Shell type (bash, zsh, fish). Defaults to zsh.
@@ -117,7 +123,7 @@ fn shell_init(shell: &str) -> &'static str {
         "bash" => concat!(
             // follow wrapper
             "dhl() {\n",
-            "  if [[ \"$1\" == create ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
+            "  if [[ \"$1\" == create || \"$1\" == goto || \"$1\" == go ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
             "    local _out _status _cd\n",
             "    _out=$(command dhl \"$@\")\n",
             "    _status=$?\n",
@@ -139,7 +145,7 @@ fn shell_init(shell: &str) -> &'static str {
         "fish" => concat!(
             // follow wrapper
             "function dhl\n",
-            "    if test \"$argv[1]\" = create; and not contains -- --no-follow $argv\n",
+            "    if contains -- \"$argv[1]\" create goto go; and not contains -- --no-follow $argv\n",
             "        set _dhl_out (command dhl $argv)\n",
             "        set _dhl_status $status\n",
             "        for line in $_dhl_out\n",
@@ -161,7 +167,7 @@ fn shell_init(shell: &str) -> &'static str {
         _ => concat!(
             // follow wrapper
             "dhl() {\n",
-            "  if [[ \"$1\" == create ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
+            "  if [[ \"$1\" == create || \"$1\" == goto || \"$1\" == go ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
             "    local _out _status _cd\n",
             "    _out=$(command dhl \"$@\")\n",
             "    _status=$?\n",
@@ -267,6 +273,13 @@ fn main() -> Result<()> {
         Commands::Get { name } => {
             match Workspace::load(&store, &name)? {
                 Some(ws) => println!("{}", ws.path.display()),
+                None => anyhow::bail!("Workspace '{}' not found.", name),
+            }
+        }
+
+        Commands::Goto { name } => {
+            match Workspace::load(&store, &name)? {
+                Some(ws) => println!("{}{}", FOLLOW_MARKER, ws.path.display()),
                 None => anyhow::bail!("Workspace '{}' not found.", name),
             }
         }

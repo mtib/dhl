@@ -1,7 +1,8 @@
 use crate::{db::Store, repo::list_repos};
 
 const TOP_LEVEL: &[&str] = &[
-    "root", "repo", "create", "list", "ls", "delete", "rm", "get", "path", "shell-init",
+    "root", "repo", "create", "list", "ls", "delete", "rm", "get", "path", "goto", "go",
+    "shell-init",
 ];
 const ROOT_SUBCOMMANDS: &[&str] = &["add", "remove", "list", "ls"];
 const REPO_SUBCOMMANDS: &[&str] = &["list", "ls", "add", "delete", "rm"];
@@ -74,6 +75,7 @@ pub fn completions(store: &Store, words: &[String]) -> Vec<String> {
 
         "delete" | "rm" => workspace_names(store),
         "get" | "path" => workspace_names(store),
+        "goto" | "go" => workspace_names(store),
         "shell-init" => strs(SHELLS),
 
         _ => vec![],
