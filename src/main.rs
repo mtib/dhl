@@ -1,0 +1,132 @@
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use dhl::{
+    db::Store,
+    dhl_home,
+    workspace::Workspace,
+};
+use uuid::Uuid;
+
+#[derive(Parser)]
+#[command(name = "dhl", about = "Git worktree workspace manager")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Manage repository root directories
+    Root {
+        #[command(subcommand)]
+        action: RootAction,
+    },
+    /// Create a new workspace with worktrees for the given repos
+    Create {
+        /// Optional name for the workspace (default: random)
+        #[arg(long, short)]
+        name: Option<String>,
+        /// Repo specs: name, name:from:to, or name::to
+        repos: Vec<String>,
+    },
+    /// List all workspaces
+    #[command(alias = "ls")]
+    List,
+    /// Delete a workspace and its worktrees
+    #[command(alias = "rm")]
+    Delete {
+        /// Workspace name
+        name: String,
+    },
+    /// Get the path of a workspace
+    #[command(alias = "path")]
+    Get {
+        /// Workspace name
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RootAction {
+    /// Add a repository root directory
+    Add { path: String },
+    /// Remove a repository root directory
+    Remove { path: String },
+    /// List all repository root directories
+    #[command(alias = "ls")]
+    List,
+}
+
+fn open_store() -> Result<Store> {
+    let home = dhl_home()?;
+    Store::open(home.join("db"))
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let store = open_store()?;
+
+    match cli.command {
+        Commands::Root { action } => match action {
+            RootAction::Add { path } => {
+                let canonical = std::fs::canonicalize(&path)
+                    .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+                store.add_root(&canonical.to_string_lossy())?;
+                println!("Added root: {}", canonical.display());
+            }
+            RootAction::Remove { path } => {
+                let canonical = std::fs::canonicalize(&path)
+                    .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+                store.remove_root(&canonical.to_string_lossy())?;
+                println!("Removed root: {}", canonical.display());
+            }
+            RootAction::List => {
+                let roots = store.list_roots()?;
+                if roots.is_empty() {
+                    println!("No roots configured.");
+                } else {
+                    for root in roots {
+                        println!("{}", root);
+                    }
+                }
+            }
+        },
+
+        Commands::Create { name, repos } => {
+            if repos.is_empty() {
+                anyhow::bail!("Specify at least one repo.");
+            }
+            let name = name.unwrap_or_else(|| Uuid::new_v4().to_string());
+            let ws = Workspace::create(&store, name, &repos)?;
+            println!("Created workspace '{}' at {}", ws.name, ws.path.display());
+            for r in &ws.repos {
+                println!("  {} -> {}", r.repo, r.worktree_path.display());
+            }
+        }
+
+        Commands::List => {
+            let workspaces = Workspace::list_all(&store)?;
+            if workspaces.is_empty() {
+                println!("No workspaces.");
+            } else {
+                for ws in workspaces {
+                    println!("{}\t{}", ws.name, ws.path.display());
+                }
+            }
+        }
+
+        Commands::Delete { name } => {
+            Workspace::delete(&store, &name)?;
+            println!("Deleted workspace '{}'.", name);
+        }
+
+        Commands::Get { name } => {
+            match Workspace::load(&store, &name)? {
+                Some(ws) => println!("{}", ws.path.display()),
+                None => anyhow::bail!("Workspace '{}' not found.", name),
+            }
+        }
+    }
+
+    Ok(())
+}

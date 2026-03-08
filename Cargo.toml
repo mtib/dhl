@@ -1,0 +1,21 @@
+[package]
+name = "dhl"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "dhl"
+path = "src/main.rs"
+
+[lib]
+name = "dhl"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+rocksdb = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+dirs = "5"
