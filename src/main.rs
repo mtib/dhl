@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use dhl::{
     db::Store,
     dhl_home,
+    repo::{clone_repo, delete_repo, list_repos},
     workspace::Workspace,
 };
 use uuid::Uuid;
@@ -21,9 +22,14 @@ enum Commands {
         #[command(subcommand)]
         action: RootAction,
     },
+    /// Manage repositories within roots
+    Repo {
+        #[command(subcommand)]
+        action: RepoAction,
+    },
     /// Create a new workspace with worktrees for the given repos
     Create {
-        /// Optional name for the workspace (default: random)
+        /// Name for the workspace (default: random UUID)
         #[arg(long, short)]
         name: Option<String>,
         /// Repo specs: name, name:from:to, or name::to
@@ -55,6 +61,30 @@ enum RootAction {
     /// List all repository root directories
     #[command(alias = "ls")]
     List,
+}
+
+#[derive(Subcommand)]
+enum RepoAction {
+    /// List all repositories across all roots
+    #[command(alias = "ls")]
+    List,
+    /// Clone a git repository into a root
+    Add {
+        /// Git URL to clone
+        url: String,
+        /// Root directory to clone into (required when multiple roots are configured)
+        #[arg(long)]
+        root: Option<String>,
+        /// Local directory name (defaults to repo name derived from URL)
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Delete a repository from disk
+    #[command(alias = "rm")]
+    Delete {
+        /// Repository name (or root-prefixed name for disambiguation)
+        name: String,
+    },
 }
 
 fn open_store() -> Result<Store> {
@@ -89,6 +119,25 @@ fn main() -> Result<()> {
                         println!("{}", root);
                     }
                 }
+            }
+        },
+
+        Commands::Repo { action } => match action {
+            RepoAction::List => {
+                let repos = list_repos(&store)?;
+                if repos.is_empty() {
+                    println!("No repositories found.");
+                } else {
+                    for repo in repos {
+                        println!("{}", repo.display_name);
+                    }
+                }
+            }
+            RepoAction::Add { url, root, name } => {
+                clone_repo(&store, &url, root.as_deref(), name.as_deref())?;
+            }
+            RepoAction::Delete { name } => {
+                delete_repo(&store, &name)?;
             }
         },
 
