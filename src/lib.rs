@@ -1,6 +1,7 @@
 pub mod db;
-pub mod workspace;
+pub mod names;
 pub mod repo;
+pub mod workspace;
 
 use anyhow::Result;
 use std::path::PathBuf;

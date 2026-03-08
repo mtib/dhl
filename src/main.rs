@@ -3,10 +3,13 @@ use clap::{Parser, Subcommand};
 use dhl::{
     db::Store,
     dhl_home,
+    names::random_name,
     repo::{clone_repo, delete_repo, list_repos},
     workspace::Workspace,
 };
-use uuid::Uuid;
+
+/// Marker prefix written to stdout so the shell wrapper can cd to the new workspace.
+pub const FOLLOW_MARKER: &str = "DHL_CD:";
 
 #[derive(Parser)]
 #[command(name = "dhl", about = "Git worktree workspace manager")]
@@ -29,9 +32,12 @@ enum Commands {
     },
     /// Create a new workspace with worktrees for the given repos
     Create {
-        /// Name for the workspace (default: random UUID)
+        /// Name for the workspace (default: three random words)
         #[arg(long, short)]
         name: Option<String>,
+        /// Do not cd into the workspace after creation
+        #[arg(long)]
+        no_follow: bool,
         /// Repo specs: name, name:from:to, or name::to
         repos: Vec<String>,
     },
@@ -49,6 +55,12 @@ enum Commands {
     Get {
         /// Workspace name
         name: String,
+    },
+    /// Print shell integration code; add `eval "$(dhl shell-init)"` to your shell rc
+    ShellInit {
+        /// Shell type (bash, zsh, fish). Defaults to zsh.
+        #[arg(default_value = "zsh")]
+        shell: String,
     },
 }
 
@@ -90,6 +102,45 @@ enum RepoAction {
 fn open_store() -> Result<Store> {
     let home = dhl_home()?;
     Store::open(home.join("db"))
+}
+
+fn shell_init(shell: &str) -> &'static str {
+    match shell {
+        "fish" => concat!(
+            "function dhl\n",
+            "    if test \"$argv[1]\" = create; and not contains -- --no-follow $argv\n",
+            "        set _dhl_out (command dhl $argv)\n",
+            "        set _dhl_status $status\n",
+            "        for line in $_dhl_out\n",
+            "            if string match -q 'DHL_CD:*' $line\n",
+            "                cd (string replace 'DHL_CD:' '' $line)\n",
+            "            else\n",
+            "                echo $line\n",
+            "            end\n",
+            "        end\n",
+            "        return $_dhl_status\n",
+            "    else\n",
+            "        command dhl $argv\n",
+            "    end\n",
+            "end\n",
+        ),
+        // bash and zsh share identical syntax
+        _ => concat!(
+            "dhl() {\n",
+            "  if [[ \"$1\" == create ]] && [[ \" $* \" != *\" --no-follow \"* ]]; then\n",
+            "    local _out _status _cd\n",
+            "    _out=$(command dhl \"$@\")\n",
+            "    _status=$?\n",
+            "    _cd=$(printf '%s\\n' \"$_out\" | grep '^DHL_CD:' | head -1 | cut -c8-)\n",
+            "    printf '%s\\n' \"$_out\" | grep -v '^DHL_CD:'\n",
+            "    [[ -n \"$_cd\" ]] && cd \"$_cd\"\n",
+            "    return \"$_status\"\n",
+            "  else\n",
+            "    command dhl \"$@\"\n",
+            "  fi\n",
+            "}\n",
+        ),
+    }
 }
 
 fn main() -> Result<()> {
@@ -141,15 +192,18 @@ fn main() -> Result<()> {
             }
         },
 
-        Commands::Create { name, repos } => {
+        Commands::Create { name, no_follow, repos } => {
             if repos.is_empty() {
                 anyhow::bail!("Specify at least one repo.");
             }
-            let name = name.unwrap_or_else(|| Uuid::new_v4().to_string());
+            let name = name.unwrap_or_else(random_name);
             let ws = Workspace::create(&store, name, &repos)?;
             println!("Created workspace '{}' at {}", ws.name, ws.path.display());
             for r in &ws.repos {
                 println!("  {} -> {}", r.repo, r.worktree_path.display());
+            }
+            if !no_follow {
+                println!("{}{}", FOLLOW_MARKER, ws.path.display());
             }
         }
 
@@ -174,6 +228,10 @@ fn main() -> Result<()> {
                 Some(ws) => println!("{}", ws.path.display()),
                 None => anyhow::bail!("Workspace '{}' not found.", name),
             }
+        }
+
+        Commands::ShellInit { shell } => {
+            print!("{}", shell_init(&shell));
         }
     }
 
