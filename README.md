@@ -31,24 +31,27 @@ Download the latest binary for your platform from the [releases page](https://gi
 
 ## Shell integration
 
-Add this to your `~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish` to enable automatic `cd` into newly created workspaces:
+Add this to your shell rc file to enable automatic `cd` and tab completion:
 
-**zsh / bash**
+**zsh** (`~/.zshrc`)
 ```sh
-eval "$(dhl shell-init)"        # defaults to zsh
+eval "$(dhl shell-init)"
+```
+
+**bash** (`~/.bashrc`)
+```sh
 eval "$(dhl shell-init bash)"
 ```
 
-**fish**
+**fish** (`~/.config/fish/config.fish`)
 ```fish
 dhl shell-init fish | source
 ```
 
-With shell integration active, `dhl create` will `cd` you into the new workspace automatically. Pass `--no-follow` to stay in the current directory:
-
-```sh
-dhl create --no-follow api frontend
-```
+Shell integration enables:
+- `dhl create` automatically cds into the new workspace
+- `dhl goto <name>` navigates to an existing workspace
+- Tab completion for all commands, workspace names, repo names, and flags
 
 ## Usage
 
@@ -61,15 +64,15 @@ dhl root add ~/Code
 dhl root add ~/Projects
 ```
 
-### 2. Browse repositories
+### 2. Browse available repositories
 
 ```sh
-dhl repo list          # or: dhl repo ls
+dhl repo list        # or: dhl repo ls
 ```
 
-Repositories with the same name in multiple roots are shown with their full root path prefix (e.g. `/Users/you/Code/myrepo`). That prefixed form can be used anywhere a repo name is accepted.
+Repositories with the same name across multiple roots are shown with their full root path as a prefix (e.g. `/Users/you/Code/myrepo`). That prefixed form is accepted everywhere a repo name is expected.
 
-### 3. Clone a repository
+### 3. Clone a repository into a root
 
 ```sh
 dhl repo add https://github.com/org/myrepo
@@ -79,16 +82,17 @@ dhl repo add https://github.com/org/myrepo --root ~/Projects --name local-name
 ### 4. Create a workspace
 
 ```sh
-# Name is auto-generated (three memorable words, e.g. "cargo-neural-branch")
+# Name auto-generated from themed word list (e.g. "cargo-neural-branch")
 dhl create api frontend
 
-# With a custom name
+# Custom name
 dhl create --name myfeature api frontend
 
-# Branch specs: repo:from:to  or  repo::new-branch
-dhl create api:main:feat/x frontend:main:feat/x
+# Branch specs
+dhl create api:main:feat/x frontend:main:feat/x   # new branch from base
+dhl create api::feat/x                             # new branch from HEAD
 
-# Stay in current directory instead of following the new workspace
+# Stay in current directory
 dhl create --no-follow api frontend
 ```
 
@@ -100,17 +104,17 @@ Repo spec syntax:
 | `repo:from:to` | `git worktree add <path> -b <to> <from>` |
 | `repo::to` | `git worktree add -b <to> <path>` |
 
-The workspace lands at `~/.dhl/<name>/` with each repo as a subdirectory.
-
 ### 5. Navigate to a workspace
 
 ```sh
-# With shell integration (automatic after dhl create):
-dhl create api
+dhl goto myfeature   # or: dhl go myfeature
+```
 
-# Manually:
-cd $(dhl get myfeature)
-cd $(dhl path myfeature)   # alias
+With shell integration active this cds your shell into the workspace. Without it, prints a `DHL_CD:` marker line (useful for scripting).
+
+```sh
+# Print path only (no cd)
+dhl get myfeature    # or: dhl path myfeature
 ```
 
 ### 6. List workspaces
@@ -122,14 +126,14 @@ dhl ls
 
 ### 7. Delete a workspace
 
-Removes worktrees and the workspace directory:
+Removes all worktrees and the workspace directory:
 
 ```sh
 dhl delete myfeature
 dhl rm myfeature
 ```
 
-### 8. Delete a repository
+### 8. Delete a repository from disk
 
 ```sh
 dhl repo delete myrepo
@@ -145,19 +149,36 @@ dhl root list / ls                List registered roots
 
 dhl repo list / ls                List all repositories across roots
 dhl repo add <url>                Clone a repository into a root
-      [--root <path>]               Target root (required if >1 root)
+      [--root <path>]               Target root (required if >1 configured)
       [--name <name>]               Override local directory name
 dhl repo delete / rm <name>       Remove a repository from disk
 
-dhl create [--name <n>]           Create a workspace
+dhl create [--name <n>]           Create a workspace (cds in by default)
            [--no-follow]            Don't cd into the new workspace
            <repo>...
+dhl goto   / go   <name>          Navigate shell to an existing workspace
+dhl get    / path <name>          Print workspace path (no cd)
 dhl list   / ls                   List all workspaces
-dhl delete / rm  <name>           Delete a workspace and its worktrees
-dhl get    / path <name>          Print workspace path
+dhl delete / rm   <name>          Delete a workspace and its worktrees
 
 dhl shell-init [bash|zsh|fish]    Print shell integration code
 ```
+
+## Tab completion
+
+Completions are dynamic — they read live from the store:
+
+| Context | Completes |
+|---------|-----------|
+| `dhl <TAB>` | all subcommands |
+| `dhl create <TAB>` | repo names, `--name`, `--no-follow` |
+| `dhl goto <TAB>` | workspace names |
+| `dhl delete <TAB>` | workspace names |
+| `dhl get <TAB>` | workspace names |
+| `dhl root remove <TAB>` | registered roots |
+| `dhl repo delete <TAB>` | repo names |
+| `dhl repo add --root <TAB>` | registered roots |
+| `dhl shell-init <TAB>` | `bash`, `zsh`, `fish` |
 
 ## How it works
 
@@ -165,7 +186,7 @@ dhl shell-init [bash|zsh|fish]    Print shell integration code
 - Each workspace is a directory under `~/.dhl/` containing git worktrees.
 - Worktrees are created and removed via `git worktree add/remove`.
 - Workspace names default to three words drawn from a package/delivery/code/AI vocabulary (e.g. `cargo-neural-branch`).
-- Shell follow behaviour works via a wrapper function emitted by `dhl shell-init` that intercepts the `DHL_CD:` marker line printed by `dhl create`.
+- Shell navigation works via a wrapper function emitted by `dhl shell-init` that intercepts the `DHL_CD:` marker printed by `create` and `goto`, strips it from displayed output, and cds to the path.
 
 ## Brew tap setup (for contributors)
 
