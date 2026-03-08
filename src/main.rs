@@ -185,6 +185,10 @@ fn shell_init(shell: &str) -> &'static str {
             "  _comps=(${(f)\"$(command dhl __complete -- \"${words[@]}\")\"})\n",
             "  compadd -a _comps\n",
             "}\n",
+            // compdef is only available after compinit; initialise if needed
+            "if ! (( $+functions[compdef] )); then\n",
+            "  autoload -Uz compinit && compinit\n",
+            "fi\n",
             "compdef _dhl_complete dhl\n",
         ),
     }
