@@ -22,10 +22,10 @@ jobs:
             os: ubuntu-latest
             cross: true
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             cross: false
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             cross: false
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -94,8 +94,7 @@ jobs:
       - name: Compute SHA256 checksums
         run: |
           cd artifacts
-          sha256sum *.tar.gz *.zip 2>/dev/null | tee ../checksums.txt || true
-          sha256sum *.tar.gz 2>/dev/null >> ../checksums.txt || true
+          sha256sum * | tee ../checksums.txt
 
       - name: Delete existing latest release
         env:
