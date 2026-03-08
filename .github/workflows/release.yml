@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: release
@@ -90,8 +91,20 @@ jobs:
     name: Publish release
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      arm64_sha: ${{ steps.checksums.outputs.arm64 }}
+      x86_64_sha: ${{ steps.checksums.outputs.x86_64 }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute version tag
+        id: version
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          DATE=$(date +%Y%m%d)
+          SHA=$(git rev-parse --short HEAD)
+          echo "tag=v${CARGO_VERSION}-${DATE}-${SHA}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -100,25 +113,21 @@ jobs:
           merge-multiple: true
 
       - name: Compute SHA256 checksums
+        id: checksums
         run: |
           cd artifacts
           sha256sum * | tee ../checksums.txt
+          echo "arm64=$(sha256sum dhl-aarch64-apple-darwin.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "x86_64=$(sha256sum dhl-x86_64-apple-darwin.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
 
-      - name: Delete existing latest release
+      - name: Create versioned release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete latest --yes 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create latest \
-            --title "Latest ($(git rev-parse --short HEAD))" \
-            --notes "Automated build from commit $(git rev-parse HEAD).
-
+          TAG=${{ steps.version.outputs.tag }}
+          git tag "$TAG"
+          git push origin "$TAG"
+          cat > notes.md << EOF
           ## Install
 
           ### macOS (Homebrew)
@@ -133,27 +142,31 @@ jobs:
           \`\`\`
           $(cat checksums.txt)
           \`\`\`
-          " \
-            --prerelease \
+          EOF
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file notes.md \
             artifacts/* checksums.txt
+
+      - name: Move latest tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          gh release delete latest --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+          git tag -f latest
+          git push origin latest
+          gh release create latest \
+            --title "Latest ($TAG)" \
+            --notes "Latest release: [$TAG](https://github.com/mtib/dhl/releases/tag/$TAG)" \
+            --prerelease
 
   update-tap:
     name: Update Homebrew tap
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Compute SHAs
-        id: sha
-        run: |
-          echo "arm64=$(sha256sum artifacts/dhl-aarch64-apple-darwin.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "x86_64=$(sha256sum artifacts/dhl-x86_64-apple-darwin.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
-
       - name: Checkout tap repo
         uses: actions/checkout@v4
         with:
@@ -163,22 +176,25 @@ jobs:
 
       - name: Update formula
         run: |
-          COMMIT=$(git -C ${{ github.workspace }} rev-parse HEAD 2>/dev/null || echo "${{ github.sha }}")
-          cat > tap/Formula/dhl.rb << 'FORMULA'
+          TAG=${{ needs.release.outputs.tag }}
+          ARM64=${{ needs.release.outputs.arm64_sha }}
+          X86_64=${{ needs.release.outputs.x86_64_sha }}
+          VERSION=${TAG#v}
+          cat > tap/Formula/dhl.rb << FORMULA
           class Dhl < Formula
             desc "Git worktree workspace manager"
             homepage "https://github.com/mtib/dhl"
-            version "latest"
+            version "${VERSION}"
             license "MIT"
 
             on_macos do
               on_arm do
-                url "https://github.com/mtib/dhl/releases/download/latest/dhl-aarch64-apple-darwin.tar.gz"
-                sha256 "PLACEHOLDER_ARM64"
+                url "https://github.com/mtib/dhl/releases/download/${TAG}/dhl-aarch64-apple-darwin.tar.gz"
+                sha256 "${ARM64}"
               end
               on_intel do
-                url "https://github.com/mtib/dhl/releases/download/latest/dhl-x86_64-apple-darwin.tar.gz"
-                sha256 "PLACEHOLDER_X86_64"
+                url "https://github.com/mtib/dhl/releases/download/${TAG}/dhl-x86_64-apple-darwin.tar.gz"
+                sha256 "${X86_64}"
               end
             end
 
@@ -191,8 +207,6 @@ jobs:
             end
           end
           FORMULA
-          sed -i "s/PLACEHOLDER_ARM64/${{ steps.sha.outputs.arm64 }}/" tap/Formula/dhl.rb
-          sed -i "s/PLACEHOLDER_X86_64/${{ steps.sha.outputs.x86_64 }}/" tap/Formula/dhl.rb
 
       - name: Commit and push formula
         run: |
@@ -200,5 +214,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/dhl.rb
-          git diff --cached --quiet || git commit -m "dhl: update to ${{ github.sha }}"
+          git diff --cached --quiet || git commit -m "dhl: update to ${{ needs.release.outputs.tag }}"
           git push
