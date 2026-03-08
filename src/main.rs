@@ -45,11 +45,14 @@ enum Commands {
     /// List all workspaces
     #[command(alias = "ls")]
     List,
-    /// Delete a workspace and its worktrees
+    /// Delete one or more workspaces and their worktrees
     #[command(alias = "rm")]
     Delete {
-        /// Workspace name
-        name: String,
+        /// Workspace names to delete
+        names: Vec<String>,
+        /// Delete all workspaces
+        #[arg(long)]
+        all: bool,
     },
     /// Get the path of a workspace
     #[command(alias = "path")]
@@ -269,9 +272,19 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Delete { name } => {
-            Workspace::delete(&store, &name)?;
-            println!("Deleted workspace '{}'.", name);
+        Commands::Delete { names, all } => {
+            if !all && names.is_empty() {
+                anyhow::bail!("Specify at least one workspace name or pass --all.");
+            }
+            let to_delete: Vec<String> = if all {
+                Workspace::list_all(&store)?.into_iter().map(|ws| ws.name).collect()
+            } else {
+                names
+            };
+            for name in &to_delete {
+                Workspace::delete(&store, name)?;
+                println!("Deleted workspace '{}'.", name);
+            }
         }
 
         Commands::Get { name } => {

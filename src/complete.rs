@@ -73,7 +73,13 @@ pub fn completions(store: &Store, words: &[String]) -> Vec<String> {
             out
         }
 
-        "delete" | "rm" => workspace_names(store),
+        "delete" | "rm" => {
+            let mut out = workspace_names(store);
+            if !words.iter().any(|w| w == "--all") {
+                out.push("--all".into());
+            }
+            out
+        }
         "get" | "path" => workspace_names(store),
         "goto" | "go" => workspace_names(store),
         "shell-init" => strs(SHELLS),
