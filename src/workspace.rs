@@ -238,6 +238,20 @@ fn write_claude_md(ws: &Workspace) {
          and prefer not exposing ports at all when not absolutely necessary.\n"
     );
 
+    let _ = writeln!(
+        content,
+        "Gitignored `.env` files have been copied from each source repository. \
+         Review and update them as needed — values like ports, database names, \
+         or API keys may need to differ from the defaults to avoid conflicts.\n"
+    );
+
+    let _ = writeln!(
+        content,
+        "Expect this workspace to run concurrently with other workspaces and \
+         the original repositories. Avoid collisions on shared resources such as \
+         ports, database names, container names, and file locks.\n"
+    );
+
     let _ = writeln!(content, "## Repositories\n");
     let _ = writeln!(
         content,
