@@ -186,7 +186,9 @@ fn write_claude_md(ws: &Workspace) {
         content,
         "Because workspaces are created on demand, any Docker Compose setups \
          will likely need to be started before use. \
-         Shut them down when work is completed.\n"
+         Shut them down when work is completed. \
+         Use Docker Compose overrides to avoid port conflicts with other workspaces, \
+         and prefer not exposing ports at all when not absolutely necessary.\n"
     );
 
     let _ = writeln!(content, "## Repositories\n");
