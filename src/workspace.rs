@@ -46,6 +46,8 @@ impl Workspace {
                 to_branch.as_deref(),
             )?;
 
+            copy_env_files(&repo_path, &worktree_path);
+
             repos.push(WorkspaceRepo {
                 repo: repo_name,
                 worktree_path,
@@ -156,6 +158,51 @@ fn remove_worktree(repo: &Path, worktree_path: &Path) {
         .arg("--force")
         .arg(worktree_path)
         .output();
+}
+
+/// Copy gitignored `*.env*` files from the source repo into the new worktree,
+/// preserving their relative paths.
+fn copy_env_files(source: &Path, worktree: &Path) {
+    // List ignored files that are present on disk.
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(source)
+        .arg("ls-files")
+        .arg("--others")
+        .arg("--ignored")
+        .arg("--exclude-standard")
+        .output();
+
+    let output = match output {
+        Ok(o) if o.status.success() => o,
+        _ => return,
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for rel in stdout.lines() {
+        // Match any path component containing ".env" (e.g. .env, .env.local, config/.env.dev)
+        let filename = match Path::new(rel).file_name().and_then(|f| f.to_str()) {
+            Some(f) => f,
+            None => continue,
+        };
+        if !filename.contains(".env") {
+            continue;
+        }
+
+        let src_file = source.join(rel);
+        let dst_file = worktree.join(rel);
+
+        if !src_file.is_file() {
+            continue;
+        }
+
+        if let Some(parent) = dst_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if std::fs::copy(&src_file, &dst_file).is_ok() {
+            println!("  Copied {}", rel);
+        }
+    }
 }
 
 fn write_claude_md(ws: &Workspace) {
