@@ -190,8 +190,14 @@ fn write_claude_md(ws: &Workspace) {
     );
 
     let _ = writeln!(content, "## Repositories\n");
-    let _ = writeln!(content, "| Repo | Branch | Based on | Source (reference only) |");
-    let _ = writeln!(content, "|------|--------|----------|------------------------|");
+    let _ = writeln!(
+        content,
+        "| Repo | Branch | Based on | Source (reference only) |"
+    );
+    let _ = writeln!(
+        content,
+        "|------|--------|----------|------------------------|"
+    );
 
     for repo in &ws.repos {
         let branch = repo.branch.as_deref().unwrap_or("(default)");
