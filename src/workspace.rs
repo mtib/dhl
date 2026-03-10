@@ -21,6 +21,10 @@ pub struct WorkspaceRepo {
     pub repo: String,
     pub worktree_path: PathBuf,
     pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<PathBuf>,
 }
 
 impl Workspace {
@@ -45,7 +49,9 @@ impl Workspace {
             repos.push(WorkspaceRepo {
                 repo: repo_name,
                 worktree_path,
-                branch: to_branch.or(from_branch),
+                branch: to_branch.or(from_branch.clone()),
+                base_branch: from_branch,
+                source_path: Some(repo_path),
             });
         }
 
@@ -54,6 +60,9 @@ impl Workspace {
             path: workspace_path,
             repos,
         };
+
+        write_claude_md(&ws);
+
         let serialized = serde_json::to_string(&ws)?;
         store.put_workspace(&name, &serialized)?;
         Ok(ws)
@@ -147,4 +156,58 @@ fn remove_worktree(repo: &Path, worktree_path: &Path) {
         .arg("--force")
         .arg(worktree_path)
         .output();
+}
+
+fn write_claude_md(ws: &Workspace) {
+    use std::fmt::Write;
+
+    let mut content = String::new();
+    let _ = writeln!(content, "# Workspace: {}\n", ws.name);
+    let _ = writeln!(
+        content,
+        "This is a [dhl](https://github.com/mtib/dhl) workspace using git worktrees. \
+         Each subdirectory is a worktree checked out from its parent repository.\n"
+    );
+    let _ = writeln!(
+        content,
+        "All work should be contained to this workspace. \
+         Do not read from or modify the source repositories directly. \
+         If you need code from a repository that is not part of this workspace \
+         but is referenced by a source path above, propose adding a worktree for it \
+         using `git -C <source_path> worktree add {}/<name>`. \
+         Before doing so, verify the source repository's current branch and \
+         that the working tree is clean (`git -C <source_path> status`). \
+         If you need a completely new set of repositories, \
+         propose creating a new workspace with `dhl create` instead.\n",
+        ws.path.display()
+    );
+
+    let _ = writeln!(
+        content,
+        "Because workspaces are created on demand, any Docker Compose setups \
+         will likely need to be started before use. \
+         Shut them down when work is completed.\n"
+    );
+
+    let _ = writeln!(content, "## Repositories\n");
+    let _ = writeln!(content, "| Repo | Branch | Based on | Source (reference only) |");
+    let _ = writeln!(content, "|------|--------|----------|------------------------|");
+
+    for repo in &ws.repos {
+        let branch = repo.branch.as_deref().unwrap_or("(default)");
+        let base = repo.base_branch.as_deref().unwrap_or("-");
+        let source = repo
+            .source_path
+            .as_ref()
+            .map(|p| format!("`{}`", p.display()))
+            .unwrap_or_else(|| "-".to_string());
+        let _ = writeln!(
+            content,
+            "| `{}` | `{}` | {} | {} |",
+            repo.repo, branch, base, source
+        );
+    }
+
+    let claude_md_path = ws.path.join("CLAUDE.md");
+    let _ = std::fs::write(&claude_md_path, content);
 }
