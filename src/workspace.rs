@@ -115,30 +115,73 @@ fn create_worktree(
     from_branch: Option<&str>,
     to_branch: Option<&str>,
 ) -> Result<()> {
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo).arg("worktree").arg("add");
+    // Prune stale worktree bookkeeping so reused branch names don't conflict.
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .arg("worktree")
+        .arg("prune")
+        .output();
 
-    match (from_branch, to_branch) {
-        (Some(from), Some(to)) => {
-            cmd.arg(worktree_path).arg("-b").arg(to).arg(from);
-        }
-        (None, Some(to)) => {
-            cmd.arg("-b").arg(to).arg(worktree_path);
-        }
-        (Some(from), None) => {
-            cmd.arg(worktree_path).arg(from);
-        }
-        (None, None) => {
-            cmd.arg(worktree_path);
-        }
+    // Remove leftover worktree directory from a previous failed attempt.
+    if worktree_path.exists() {
+        let _ = std::fs::remove_dir_all(worktree_path);
     }
 
-    let output = cmd.output()?;
+    let output = match (from_branch, to_branch) {
+        (Some(from), Some(to)) => {
+            // Try creating a new branch; fall back to -B (reset) if it already exists.
+            let out = git_worktree_add(repo, worktree_path, &["-b", to, from])?;
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("already exists") {
+                    git_worktree_add(repo, worktree_path, &[to])?
+                } else {
+                    out
+                }
+            } else {
+                out
+            }
+        }
+        (None, Some(to)) => {
+            let out = git_worktree_add(repo, worktree_path, &["-b", to])?;
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("already exists") {
+                    git_worktree_add(repo, worktree_path, &[to])?
+                } else {
+                    out
+                }
+            } else {
+                out
+            }
+        }
+        (Some(from), None) => {
+            // Detach to avoid "already checked out" errors.
+            git_worktree_add(repo, worktree_path, &["--detach", from])?
+        }
+        (None, None) => git_worktree_add(repo, worktree_path, &["--detach"])?,
+    };
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!("git worktree add failed: {}", stderr);
     }
     Ok(())
+}
+
+fn git_worktree_add(
+    repo: &Path,
+    worktree_path: &Path,
+    args: &[&str],
+) -> Result<std::process::Output> {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo).arg("worktree").arg("add");
+    cmd.arg(worktree_path);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    Ok(cmd.output()?)
 }
 
 fn find_repo_path_from_worktree(
